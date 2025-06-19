@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 const API_URL = 'http://localhost:5002';
 
 function App() {
-  const [addBook, setAddBook] = useState({ bookId: '', name: '', author: '', isbn: '', publicationDate: '', genre: '' });
+  const [addBook, setAddBook] = useState({ name: '', author: '', isbn: '', publicationDate: '', genre: '' });
   const [updateBook, setUpdateBook] = useState({ bookId: '', name: '', status: '' });
   const [reserve, setReserve] = useState({ bookId: '', userId: '' });
   const [returnBook, setReturnBook] = useState({ bookId: '', userId: '' });
@@ -50,8 +50,8 @@ function App() {
           <h2>Books</h2>
           <ul>
             {books.map(book => (
-              <li key={book.bookId}>
-                <b>{book.name}</b> by {book.author} (Status: {book.status})
+              <li key={book.book_id || book.bookId}>
+                <b>{book.name}</b> by {book.author} (Status: {book.status}) [ID: {book.book_id || book.bookId}]
               </li>
             ))}
           </ul>
@@ -59,9 +59,11 @@ function App() {
       )}
       <h2>Add Book</h2>
       <form onSubmit={handleSubmit(`${API_URL}/books`, 'POST', addBook)}>
-        {Object.keys(addBook).map(key => (
-          <input key={key} name={key} value={addBook[key]} onChange={handleChange(setAddBook)} placeholder={key} required style={{ margin: 4 }} />
-        ))}
+        <input name="name" value={addBook.name} onChange={handleChange(setAddBook)} placeholder="name" required style={{ margin: 4 }} />
+        <input name="author" value={addBook.author} onChange={handleChange(setAddBook)} placeholder="author" required style={{ margin: 4 }} />
+        <input name="isbn" value={addBook.isbn} onChange={handleChange(setAddBook)} placeholder="isbn" required style={{ margin: 4 }} />
+        <input name="publicationDate" value={addBook.publicationDate} onChange={handleChange(setAddBook)} placeholder="publicationDate" required style={{ margin: 4 }} />
+        <input name="genre" value={addBook.genre} onChange={handleChange(setAddBook)} placeholder="genre" required style={{ margin: 4 }} />
         <button type="submit">Add</button>
       </form>
 

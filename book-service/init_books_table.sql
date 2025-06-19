@@ -1,6 +1,7 @@
 -- Migration: Create books table for read model
-CREATE TABLE IF NOT EXISTS books (
-    book_id UUID PRIMARY KEY,
+DROP TABLE IF EXISTS books CASCADE;
+CREATE TABLE books (
+    book_id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     author VARCHAR(100) NOT NULL,
     isbn VARCHAR(20),

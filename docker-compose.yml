@@ -62,6 +62,22 @@ services:
       - db_data:/var/lib/postgresql/data
     networks:
       - bookexchange_net
+  migration-service:
+    image: postgres:15
+    depends_on:
+      - database-service
+    environment:
+      POSTGRES_USER: bookexchange
+      POSTGRES_PASSWORD: bookexchange
+      POSTGRES_DB: bookexchange
+    volumes:
+      - ./book-service/init_books_table.sql:/docker-entrypoint-initdb.d/01_init_books_table.sql:ro
+      - ./book-service/init_events_table.sql:/docker-entrypoint-initdb.d/02_init_events_table.sql:ro
+      - ./user-service/init_users_table.sql:/docker-entrypoint-initdb.d/03_init_users_table.sql:ro
+      - ./migration-service/migrate.sh:/migrate.sh:ro
+    entrypoint: ["/bin/bash", "/migrate.sh"]
+    networks:
+      - bookexchange_net
 volumes:
   db_data:
 
