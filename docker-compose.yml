@@ -1,0 +1,70 @@
+version: '3.8'
+services:
+  user-service:
+    build: ./user-service
+    ports:
+      - "5001:5001"
+    depends_on:
+      - database-service
+    networks:
+      - bookexchange_net
+  book-service:
+    build: ./book-service
+    ports:
+      - "5002:5002"
+    depends_on:
+      - database-service
+      - redis
+    networks:
+      - bookexchange_net
+  exchange-service:
+    build: ./exchange-service
+    ports:
+      - "5003:5003"
+    depends_on:
+      - database-service
+    networks:
+      - bookexchange_net
+  user-interface:
+    build: ./user-interface
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./user-interface:/app
+      - /app/node_modules
+    depends_on:
+      - user-service
+      - book-service
+      - exchange-service
+    networks:
+      - bookexchange_net
+  notification-service:
+    build: ./notification-service
+    depends_on:
+      - redis
+    networks:
+      - bookexchange_net
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    networks:
+      - bookexchange_net
+  database-service:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: bookexchange
+      POSTGRES_PASSWORD: bookexchange
+      POSTGRES_DB: bookexchange
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - bookexchange_net
+volumes:
+  db_data:
+
+networks:
+  bookexchange_net:
+    driver: bridge
