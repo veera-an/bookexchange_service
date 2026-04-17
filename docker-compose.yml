@@ -1,30 +1,153 @@
 version: '3.8'
 services:
-  user-service:
-    build: ./user-service
+
+  # ─── Databases (Database-per-Service) ───────────────────────
+  user-db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: userservice
+      POSTGRES_PASSWORD: userservice
+      POSTGRES_DB: userdb
     ports:
-      - "5001:5001"
-    depends_on:
-      - database-service
+      - "5433:5432"
+    volumes:
+      - user_db_data:/var/lib/postgresql/data
     networks:
       - bookexchange_net
+
+  book-db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: bookservice
+      POSTGRES_PASSWORD: bookservice
+      POSTGRES_DB: bookdb
+    ports:
+      - "5434:5432"
+    volumes:
+      - book_db_data:/var/lib/postgresql/data
+    networks:
+      - bookexchange_net
+
+  exchange-db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: exchangeservice
+      POSTGRES_PASSWORD: exchangeservice
+      POSTGRES_DB: exchangedb
+    ports:
+      - "5435:5432"
+    volumes:
+      - exchange_db_data:/var/lib/postgresql/data
+    networks:
+      - bookexchange_net
+
+  # ─── Message Broker ─────────────────────────────────────────
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    networks:
+      - bookexchange_net
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    networks:
+      - bookexchange_net
+
+  # ─── API Gateway (Nginx) ────────────────────────────────────
+  api-gateway:
+    build: ./api-gateway
+    ports:
+      - "80:80"
+    depends_on:
+      - user-service
+      - book-service
+      - exchange-service
+      - user-interface
+    networks:
+      - bookexchange_net
+
+  # ─── Microservices ──────────────────────────────────────────
+  user-service:
+    build:
+      context: .
+      dockerfile: user-service/Dockerfile
+    ports:
+      - "5001:5001"
+    environment:
+      PGHOST: user-db
+      PGPORT: 5432
+      PGUSER: userservice
+      PGPASSWORD: userservice
+      PGDATABASE: userdb
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+    depends_on:
+      - user-db
+      - rabbitmq
+    networks:
+      - bookexchange_net
+
   book-service:
-    build: ./book-service
+    build:
+      context: .
+      dockerfile: book-service/Dockerfile
     ports:
       - "5002:5002"
+    environment:
+      PGHOST: book-db
+      PGPORT: 5432
+      PGUSER: bookservice
+      PGPASSWORD: bookservice
+      PGDATABASE: bookdb
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      REDIS_URL: redis://redis:6379
     depends_on:
-      - database-service
+      - book-db
+      - rabbitmq
       - redis
     networks:
       - bookexchange_net
+
   exchange-service:
-    build: ./exchange-service
+    build:
+      context: .
+      dockerfile: exchange-service/Dockerfile
     ports:
       - "5003:5003"
+    environment:
+      PGHOST: exchange-db
+      PGPORT: 5432
+      PGUSER: exchangeservice
+      PGPASSWORD: exchangeservice
+      PGDATABASE: exchangedb
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      USER_SERVICE_URL: http://user-service:5001
+      BOOK_SERVICE_URL: http://book-service:5002
     depends_on:
-      - database-service
+      - exchange-db
+      - rabbitmq
     networks:
       - bookexchange_net
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: notification-service/Dockerfile
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - rabbitmq
+      - redis
+    networks:
+      - bookexchange_net
+
   user-interface:
     build: ./user-interface
     ports:
@@ -38,48 +161,29 @@ services:
       - exchange-service
     networks:
       - bookexchange_net
-  notification-service:
-    build: ./notification-service
-    depends_on:
-      - redis
-    networks:
-      - bookexchange_net
-  redis:
-    image: redis:7
-    ports:
-      - "6379:6379"
-    networks:
-      - bookexchange_net
-  database-service:
-    image: postgres:15
-    environment:
-      POSTGRES_USER: bookexchange
-      POSTGRES_PASSWORD: bookexchange
-      POSTGRES_DB: bookexchange
-    ports:
-      - "5432:5432"
-    volumes:
-      - db_data:/var/lib/postgresql/data
-    networks:
-      - bookexchange_net
+
+  # ─── Database Migrations ────────────────────────────────────
   migration-service:
     image: postgres:15
     depends_on:
-      - database-service
-    environment:
-      POSTGRES_USER: bookexchange
-      POSTGRES_PASSWORD: bookexchange
-      POSTGRES_DB: bookexchange
+      - user-db
+      - book-db
+      - exchange-db
     volumes:
-      - ./book-service/init_books_table.sql:/docker-entrypoint-initdb.d/01_init_books_table.sql:ro
-      - ./book-service/init_events_table.sql:/docker-entrypoint-initdb.d/02_init_events_table.sql:ro
-      - ./user-service/init_users_table.sql:/docker-entrypoint-initdb.d/03_init_users_table.sql:ro
+      - ./user-service/init_users_table.sql:/migrations/01_init_users_table.sql:ro
+      - ./book-service/init_books_table.sql:/migrations/02_init_books_table.sql:ro
+      - ./book-service/init_events_table.sql:/migrations/03_init_events_table.sql:ro
+      - ./exchange-service/init_trades_table.sql:/migrations/04_init_trades_table.sql:ro
+      - ./user-service/init_events_table.sql:/migrations/05_init_user_events_table.sql:ro
       - ./migration-service/migrate.sh:/migrate.sh:ro
     entrypoint: ["/bin/bash", "/migrate.sh"]
     networks:
       - bookexchange_net
+
 volumes:
-  db_data:
+  user_db_data:
+  book_db_data:
+  exchange_db_data:
 
 networks:
   bookexchange_net:

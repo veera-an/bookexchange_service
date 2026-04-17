@@ -1,15 +1,44 @@
 const express = require('express');
 const cors = require('cors');
 const { createClient } = require('redis');
+const createLogger = require('./shared/logger');
+const healthCheck = require('./shared/healthCheck');
+const { connect: connectMQ, publish, subscribe } = require('./shared/messaging');
+
 const app = express();
 const PORT = 5002;
+const logger = createLogger('book-service');
 
 const pool = require('./db');
 const redis = createClient({ url: process.env.REDIS_URL || 'redis://redis:6379' });
 redis.connect();
 
+// Connect to RabbitMQ (with retry) and subscribe to exchange events
+connectMQ().then(async () => {
+  logger.info('Connected to RabbitMQ');
+
+  // Subscribe to EXCHANGE_COMPLETED — update book status to EXCHANGED
+  await subscribe('exchange_events', 'book_exchange_completed', async (event) => {
+    if (event.type === 'EXCHANGE_COMPLETED') {
+      const { bookId } = event.payload;
+      try {
+        await pool.query("UPDATE books SET status = 'EXCHANGED' WHERE book_id = $1", [bookId]);
+        logger.info('Book status updated to EXCHANGED via choreography', { bookId });
+      } catch (err) {
+        logger.error('Failed to update book status from EXCHANGE_COMPLETED', { bookId, error: err.message });
+      }
+    }
+  });
+  logger.info('Subscribed to exchange_events');
+}).catch(err => logger.error('RabbitMQ connection failed', { error: err.message }));
+
 app.use(express.json());
 app.use(cors());
+
+// Health check with DB connectivity verification
+app.use(healthCheck('book-service', {
+  db: () => pool.query('SELECT 1')
+}));
 
 app.get('/', (req, res) => {
   res.send('Book Service is running');
@@ -17,7 +46,6 @@ app.get('/', (req, res) => {
 
 // Create book (CRUD + event sourcing + publish event)
 app.post('/books', async (req, res) => {
-  console.log('POST /books called with body:', req.body);
   const { name, author, isbn, publicationDate, genre } = req.body;
   try {
     // Write to books table, letting DB generate book_id (serial)
@@ -25,7 +53,6 @@ app.post('/books', async (req, res) => {
       'INSERT INTO books (name, author, isbn, publication_date, genre) VALUES ($1, $2, $3, $4, $5) RETURNING *',
       [name, author, isbn, publicationDate, genre]
     );
-    console.log('Insert result:', insertResult);
     const book = insertResult.rows[0];
     // Write to events table
     const event = {
@@ -46,8 +73,21 @@ app.post('/books', async (req, res) => {
       'INSERT INTO events (event_type, version, timestamp, data) VALUES ($1, $2, $3, $4)',
       [event.eventType, event.version, event.timestamp, event.data]
     );
-    // Publish event to Redis
+    // Publish event to Redis (legacy)
     await redis.publish('book-events', JSON.stringify(event));
+    // Publish BOOK_CREATED to RabbitMQ (choreography)
+    await publish('book_events', {
+      eventId: `${book.book_id}-${Date.now()}`,
+      type: 'BOOK_CREATED',
+      timestamp: event.timestamp,
+      payload: {
+        bookId: book.book_id,
+        title: book.name,
+        author: book.author,
+        status: book.status
+      }
+    });
+    logger.info('Book created and BOOK_CREATED event published', { bookId: book.book_id, name: book.name });
     res.status(201).json({
       message: 'Book created, event stored, and published',
       event,
@@ -62,7 +102,7 @@ app.post('/books', async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('Error creating book:', err);
+    logger.error('Failed to create book', { error: err.message });
     res.status(500).json({ error: 'Failed to create book' });
   }
 });
@@ -90,7 +130,7 @@ app.put('/books/:bookId', async (req, res) => {
     );
     res.status(201).json({ message: 'BookUpdated event stored and book updated', event });
   } catch (err) {
-    console.error('Error updating book:', err);
+    logger.error('Failed to update book', { error: err.message, bookId: Number(bookId) });
     res.status(500).json({ error: 'Failed to update book' });
   }
 });
@@ -118,7 +158,7 @@ app.post('/books/:bookId/reserve', async (req, res) => {
     );
     res.status(201).json({ message: 'BookReserved event stored and book reserved', event });
   } catch (err) {
-    console.error('Error reserving book:', err);
+    logger.error('Failed to reserve book', { error: err.message, bookId: Number(bookId) });
     res.status(500).json({ error: 'Failed to reserve book' });
   }
 });
@@ -146,7 +186,7 @@ app.post('/books/:bookId/return', async (req, res) => {
     );
     res.status(201).json({ message: 'BookReturned event stored and book returned', event });
   } catch (err) {
-    console.error('Error returning book:', err);
+    logger.error('Failed to return book', { error: err.message, bookId: Number(bookId) });
     res.status(500).json({ error: 'Failed to return book' });
   }
 });
@@ -175,7 +215,7 @@ app.get('/books', async (req, res) => {
     });
     res.json(Object.values(books));
   } catch (err) {
-    console.error('Error fetching books:', err);
+    logger.error('Failed to fetch books', { error: err.message });
     res.status(500).json({ error: 'Failed to fetch books' });
   }
 });
@@ -184,7 +224,10 @@ app.get('/books', async (req, res) => {
 app.get('/books/:bookId', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM books WHERE book_id = $1', [req.params.bookId]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Book not found' });
+    if (result.rows.length === 0) {
+      logger.warn('Book not found', { bookId: req.params.bookId });
+      return res.status(404).json({ error: 'Book not found' });
+    }
     const book = result.rows[0];
     res.json({
       bookId: book.book_id,
@@ -196,6 +239,7 @@ app.get('/books/:bookId', async (req, res) => {
       status: book.status
     });
   } catch (err) {
+    logger.error('Failed to fetch book', { error: err.message, bookId: req.params.bookId });
     res.status(500).json({ error: 'Failed to fetch book' });
   }
 });
@@ -203,7 +247,7 @@ app.get('/books/:bookId', async (req, res) => {
 // Only start the server if this file is run directly (not when imported for tests)
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`Book Service listening on port ${PORT}`);
+    logger.info(`Book Service listening on port ${PORT}`);
   });
 }
 

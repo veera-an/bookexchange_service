@@ -18,10 +18,10 @@ function App() {
     e.preventDefault();
     setResult('');
     try {
-      const res = await fetch(url, {
+      const res = await fetch(typeof url === 'function' ? url() : url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+        body: JSON.stringify(typeof data === 'function' ? data() : data)
       });
       const json = await res.json();
       setResult(JSON.stringify(json, null, 2));
@@ -68,7 +68,7 @@ function App() {
       </form>
 
       <h2>Update Book</h2>
-      <form onSubmit={handleSubmit(`${API_URL}/books/${updateBook.bookId}`, 'PUT', { name: updateBook.name, status: updateBook.status })}>
+      <form onSubmit={handleSubmit(() => `${API_URL}/books/${updateBook.bookId}`, 'PUT', () => ({ name: updateBook.name, status: updateBook.status }))}>
         <input name="bookId" value={updateBook.bookId} onChange={handleChange(setUpdateBook)} placeholder="bookId" required style={{ margin: 4 }} />
         <input name="name" value={updateBook.name} onChange={handleChange(setUpdateBook)} placeholder="name" required style={{ margin: 4 }} />
         <input name="status" value={updateBook.status} onChange={handleChange(setUpdateBook)} placeholder="status" required style={{ margin: 4 }} />
@@ -76,14 +76,14 @@ function App() {
       </form>
 
       <h2>Reserve Book</h2>
-      <form onSubmit={handleSubmit(`${API_URL}/books/${reserve.bookId}/reserve`, 'POST', { userId: reserve.userId })}>
+      <form onSubmit={handleSubmit(() => `${API_URL}/books/${reserve.bookId}/reserve`, 'POST', () => ({ userId: reserve.userId }))}>
         <input name="bookId" value={reserve.bookId} onChange={handleChange(setReserve)} placeholder="bookId" required style={{ margin: 4 }} />
         <input name="userId" value={reserve.userId} onChange={handleChange(setReserve)} placeholder="userId" required style={{ margin: 4 }} />
         <button type="submit">Reserve</button>
       </form>
 
       <h2>Return Book</h2>
-      <form onSubmit={handleSubmit(`${API_URL}/books/${returnBook.bookId}/return`, 'POST', { userId: returnBook.userId })}>
+      <form onSubmit={handleSubmit(() => `${API_URL}/books/${returnBook.bookId}/return`, 'POST', () => ({ userId: returnBook.userId }))}>
         <input name="bookId" value={returnBook.bookId} onChange={handleChange(setReturnBook)} placeholder="bookId" required style={{ margin: 4 }} />
         <input name="userId" value={returnBook.userId} onChange={handleChange(setReturnBook)} placeholder="userId" required style={{ margin: 4 }} />
         <button type="submit">Return</button>

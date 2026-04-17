@@ -2,11 +2,11 @@
 const { Pool } = require('pg');
 
 const pool = new Pool({
-  host: process.env.PGHOST || 'database-service',
+  host: process.env.PGHOST || 'book-db',
   port: process.env.PGPORT || 5432,
-  user: process.env.PGUSER || 'bookexchange',
-  password: process.env.PGPASSWORD || 'bookexchange',
-  database: process.env.PGDATABASE || 'bookexchange',
+  user: process.env.PGUSER || 'bookservice',
+  password: process.env.PGPASSWORD || 'bookservice',
+  database: process.env.PGDATABASE || 'bookdb',
 });
 
 module.exports = pool;

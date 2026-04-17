@@ -1,7 +1,8 @@
 FROM node:20
 WORKDIR /app
-COPY package*.json ./
+COPY user-service/package*.json ./
 RUN npm install
-COPY . .
+COPY user-service/ .
+COPY shared/ ./shared/
 EXPOSE 5001
 CMD ["npm", "start"]

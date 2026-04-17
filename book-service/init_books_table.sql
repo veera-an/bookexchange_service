@@ -7,5 +7,6 @@ CREATE TABLE books (
     isbn VARCHAR(20),
     publication_date DATE,
     genre VARCHAR(50),
-    status VARCHAR(20) DEFAULT 'AVAILABLE'
+    status VARCHAR(20) DEFAULT 'AVAILABLE',
+    reserved_by VARCHAR(100)
 );
