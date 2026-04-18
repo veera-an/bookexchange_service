@@ -1,0 +1,11 @@
+{
+  "name": "bookexchange-integration-tests",
+  "version": "1.0.0",
+  "scripts": {
+    "test": "jest --runInBand --verbose"
+  },
+  "devDependencies": {
+    "axios": "^1.15.0",
+    "jest": "^30.0.1"
+  }
+}
