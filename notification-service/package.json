@@ -4,7 +4,6 @@
   "main": "index.js",
   "dependencies": {
     "amqplib": "^1.0.3",
-    "redis": "^4.6.7",
     "winston": "^3.19.0"
   }
 }

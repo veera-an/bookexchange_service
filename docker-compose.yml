@@ -53,13 +53,6 @@ services:
     networks:
       - bookexchange_net
 
-  redis:
-    image: redis:7
-    ports:
-      - "6379:6379"
-    networks:
-      - bookexchange_net
-
   # ─── API Gateway (Nginx) ────────────────────────────────────
   api-gateway:
     build: ./api-gateway
@@ -106,11 +99,9 @@ services:
       PGPASSWORD: bookservice
       PGDATABASE: bookdb
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
-      REDIS_URL: redis://redis:6379
     depends_on:
       - book-db
       - rabbitmq
-      - redis
     networks:
       - bookexchange_net
 
@@ -141,10 +132,8 @@ services:
       dockerfile: notification-service/Dockerfile
     environment:
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
-      REDIS_URL: redis://redis:6379
     depends_on:
       - rabbitmq
-      - redis
     networks:
       - bookexchange_net
 

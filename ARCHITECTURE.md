@@ -14,7 +14,6 @@ This application is a microservice-based platform where users can list books and
 | **Docker / Docker Compose** | Containerization & orchestration | Enables reproducible deployments and network isolation between services. Each service runs in its own container with its own dependency tree. |
 | **React** | Frontend UI | Component-based SPA framework. Allows dynamic interaction with multiple backend services through a single-page interface. |
 | **Winston** | Structured logging | JSON-formatted logs with timestamps and service names enable cross-service traceability. Log levels (info, warn, error) allow filtering in production. |
-| **Redis** | Legacy pub/sub (retained) | Originally used for book event publishing. Retained alongside RabbitMQ during migration to avoid breaking existing functionality. |
 
 ## 3. Domain-Driven Design (Bounded Contexts)
 The system is divided into three primary Bounded Contexts, each represented by a microservice:

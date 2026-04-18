@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const API_URL = 'http://localhost:5002';
+const API_URL = '';
 
 function App() {
   const [addBook, setAddBook] = useState({ name: '', author: '', isbn: '', publicationDate: '', genre: '' });

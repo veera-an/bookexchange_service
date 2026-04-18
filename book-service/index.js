@@ -1,6 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-const { createClient } = require('redis');
 const createLogger = require('./shared/logger');
 const healthCheck = require('./shared/healthCheck');
 const { connect: connectMQ, publish, subscribe } = require('./shared/messaging');
@@ -10,8 +9,6 @@ const PORT = 5002;
 const logger = createLogger('book-service');
 
 const pool = require('./db');
-const redis = createClient({ url: process.env.REDIS_URL || 'redis://redis:6379' });
-redis.connect();
 
 // Connect to RabbitMQ (with retry) and subscribe to exchange events
 connectMQ().then(async () => {
@@ -73,8 +70,6 @@ app.post('/books', async (req, res) => {
       'INSERT INTO events (event_type, version, timestamp, data) VALUES ($1, $2, $3, $4)',
       [event.eventType, event.version, event.timestamp, event.data]
     );
-    // Publish event to Redis (legacy)
-    await redis.publish('book-events', JSON.stringify(event));
     // Publish BOOK_CREATED to RabbitMQ (choreography)
     await publish('book_events', {
       eventId: `${book.book_id}-${Date.now()}`,
