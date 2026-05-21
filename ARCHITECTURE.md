@@ -51,7 +51,8 @@ Each bounded context has its own dedicated PostgreSQL database, ensuring **data 
 │         │                              │                     │
 │         ▼                              ▼                     │
 │  Notification Service          Book Service (subscriber)     │
-│  (BOOK_CREATED listener)      (EXCHANGE_COMPLETED listener) │
+│  (BOOK_CREATED +               (EXCHANGE_COMPLETED listener) │
+│   EXCHANGE_COMPLETED listener)                               │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -69,8 +70,9 @@ The **Exchange Service** acts as an **Orchestrator**. When a trade is requested 
 
 1. **Book Service** (`GET /books/:bookId`) — verifies the book exists and has status `AVAILABLE`.
 2. **User Service** (`GET /users/:requesterId`) — verifies the requesting user exists.
+3. **Book Service** (`POST /books/:bookId/reserve`) — reserves the book (sets status to `RESERVED`).
 
-If either check fails, the trade is rejected with an appropriate error (404, 409, or 502). This implements the **Request-Reply** pattern (synchronous orchestration) with 5-second timeouts.
+If any check fails, the trade is rejected with an appropriate error (404, 409, or 502). This implements the **Request-Reply** pattern (synchronous orchestration) with 5-second timeouts.
 
 ```
 Client ──POST /trades──▶ Exchange Service
@@ -82,9 +84,19 @@ Client ──POST /trades──▶ Exchange Service
                   │                       │
                   └───────────┬───────────┘
                               ▼
+                   POST /books/:id/reserve
+                       Book Service
+                              │
+                              ▼
                     INSERT INTO trades
                     (status: PENDING)
 ```
+
+**Trade Lifecycle:**
+- `PENDING` → Book is reserved, awaiting owner's decision.
+- `COMPLETED` → Owner accepted; book status becomes `EXCHANGED` via choreography.
+- `REJECTED` → Owner rejected; book is returned to `AVAILABLE` via Request-Reply.
+- `RETURNED` → Book returned after a completed exchange; book becomes `AVAILABLE` again.
 
 ### B. Event-Driven (Choreography)
 The system uses **Choreography** for non-blocking updates via RabbitMQ fanout exchanges:
@@ -92,7 +104,7 @@ The system uses **Choreography** for non-blocking updates via RabbitMQ fanout ex
 | Event | Publisher | Exchange | Subscriber(s) | Action |
 |---|---|---|---|---|
 | `BOOK_CREATED` | Book Service | `book_events` | Notification Service | Logs: "New book X is available for exchange!" |
-| `EXCHANGE_COMPLETED` | Exchange Service | `exchange_events` | Book Service, Notification Service | Book Service updates book status to `EXCHANGED`; Notification Service logs the trade completion |
+| `EXCHANGE_COMPLETED` | Exchange Service | `exchange_events` | Book Service, Notification Service | Book Service updates book status to `EXCHANGED` (both `books` table and `events` table); Notification Service logs the trade completion |
 
 Events are published as JSON with acknowledgement (ack/nack). Failed messages are not requeued (dead-lettered) to prevent infinite loops.
 
