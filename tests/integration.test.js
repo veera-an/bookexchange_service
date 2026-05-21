@@ -132,9 +132,17 @@ describe('Exchange Service — Orchestration (Request-Reply)', () => {
   });
 
   test('POST /trades — returns 404 for non-existent user', async () => {
+    // Create a fresh book so it's AVAILABLE
+    const bookRes = await api.post('/books', {
+      name: 'User 404 Test Book',
+      author: 'Test',
+      isbn: '978-0000000010',
+      genre: 'Testing'
+    });
+    const freshBookId = bookRes.data.book.bookId;
     try {
       await api.post('/trades', {
-        bookId,
+        bookId: freshBookId,
         requesterId: uid()
       });
       fail('Expected 404');

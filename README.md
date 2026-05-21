@@ -4,6 +4,8 @@ A distributed microservices platform for exchanging books between users. Built w
 
 > See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed technology choices, communication patterns, and system design.
 
+README.md and ARCHITECTURE.md written with the help of Copilot.
+
 ## Quick Start
 
 ```bash

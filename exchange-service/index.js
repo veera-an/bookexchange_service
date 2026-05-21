@@ -76,7 +76,16 @@ app.post('/trades', async (req, res) => {
   }
   logger.info('Requester verified', { tradeId, requesterId });
 
-  // Step 3: Create the trade record with status PENDING
+  // Step 3: Reserve the book (Request-Reply to Book Service)
+  try {
+    await axios.post(`${BOOK_SERVICE_URL}/books/${bookId}/reserve`, { userId: requesterId }, { timeout: 5000 });
+    logger.info('Book reserved for trade', { tradeId, bookId, requesterId });
+  } catch (err) {
+    logger.error('Failed to reserve book', { tradeId, error: err.message });
+    return res.status(500).json({ error: 'Failed to reserve book for trade' });
+  }
+
+  // Step 4: Create the trade record with status PENDING
   const event = {
     eventType: 'TradeInitiated',
     version: '1.0',
@@ -205,11 +214,51 @@ app.post('/trades/:tradeId/reject', async (req, res) => {
       ['REJECTED', reason || null, tradeId]
     );
 
+    // Return book to AVAILABLE (Request-Reply to Book Service)
+    try {
+      await axios.post(`${BOOK_SERVICE_URL}/books/${trade.book_id}/return`, {}, { timeout: 5000 });
+      logger.info('Book returned to AVAILABLE after rejection', { tradeId, bookId: trade.book_id });
+    } catch (err) {
+      logger.warn('Failed to return book after rejection', { tradeId, bookId: trade.book_id, error: err.message });
+    }
+
     logger.info('Trade rejected', { tradeId, reason });
     res.json({ message: 'Trade rejected', tradeId, status: 'REJECTED' });
   } catch (err) {
     logger.error('Failed to reject trade', { tradeId, error: err.message });
     res.status(500).json({ error: 'Failed to reject trade' });
+  }
+});
+
+// ─── POST /trades/:tradeId/return — Return book after completed trade ─────
+app.post('/trades/:tradeId/return', async (req, res) => {
+  const { tradeId } = req.params;
+
+  try {
+    const result = await pool.query('SELECT * FROM trades WHERE trade_id = $1', [tradeId]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Trade not found' });
+    }
+
+    const trade = result.rows[0];
+    if (trade.status !== 'COMPLETED') {
+      return res.status(409).json({ error: `Trade cannot be returned (status: ${trade.status})` });
+    }
+
+    // Return book to AVAILABLE via Book Service
+    await axios.post(`${BOOK_SERVICE_URL}/books/${trade.book_id}/return`, {}, { timeout: 5000 });
+
+    // Update trade status to RETURNED
+    await pool.query(
+      'UPDATE trades SET status = $1 WHERE trade_id = $2',
+      ['RETURNED', tradeId]
+    );
+
+    logger.info('Trade returned — book back to AVAILABLE', { tradeId, bookId: trade.book_id });
+    res.json({ message: 'Book returned and trade marked as RETURNED', tradeId, status: 'RETURNED' });
+  } catch (err) {
+    logger.error('Failed to return trade', { tradeId, error: err.message });
+    res.status(500).json({ error: 'Failed to return trade' });
   }
 });
 

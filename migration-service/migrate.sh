@@ -39,4 +39,10 @@ PGPASSWORD=bookservice psql -h book-db -U bookservice -d bookdb \
 PGPASSWORD=exchangeservice psql -h exchange-db -U exchangeservice -d exchangedb \
   -f /migrations/04_init_trades_table.sql
 
-echo "=== All migrations completed successfully ==="
+# Seed data
+PGPASSWORD=userservice psql -h user-db -U userservice -d userdb \
+  -f /migrations/06_seed_users.sql
+PGPASSWORD=bookservice psql -h book-db -U bookservice -d bookdb \
+  -f /migrations/07_seed_books.sql
+
+echo "=== All migrations and seeds completed successfully ==="

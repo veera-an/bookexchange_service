@@ -20,6 +20,11 @@ connectMQ().then(async () => {
       const { bookId } = event.payload;
       try {
         await pool.query("UPDATE books SET status = 'EXCHANGED' WHERE book_id = $1", [bookId]);
+        // Store event so GET /books (event-sourced) reflects the change
+        await pool.query(
+          'INSERT INTO events (event_type, version, timestamp, data) VALUES ($1, $2, $3, $4)',
+          ['BookUpdated', '1.0', new Date().toISOString(), JSON.stringify({ bookId, status: 'EXCHANGED' })]
+        );
         logger.info('Book status updated to EXCHANGED via choreography', { bookId });
       } catch (err) {
         logger.error('Failed to update book status from EXCHANGE_COMPLETED', { bookId, error: err.message });
@@ -134,13 +139,23 @@ app.put('/books/:bookId', async (req, res) => {
 app.post('/books/:bookId/reserve', async (req, res) => {
   const { bookId } = req.params;
   const { userId } = req.body;
-  const event = {
-    eventType: 'BookReserved',
-    version: '1.0',
-    timestamp: new Date().toISOString(),
-    data: { bookId: Number(bookId), userId }
-  };
+
   try {
+    // Check current status
+    const bookResult = await pool.query('SELECT status FROM books WHERE book_id = $1', [bookId]);
+    if (bookResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Book not found' });
+    }
+    if (bookResult.rows[0].status !== 'AVAILABLE') {
+      return res.status(409).json({ error: `Book is already ${bookResult.rows[0].status}` });
+    }
+
+    const event = {
+      eventType: 'BookReserved',
+      version: '1.0',
+      timestamp: new Date().toISOString(),
+      data: { bookId: Number(bookId), userId }
+    };
     // Update books table (read model)
     await pool.query(
       'UPDATE books SET status = $1, reserved_by = $2 WHERE book_id = $3',
@@ -161,14 +176,24 @@ app.post('/books/:bookId/reserve', async (req, res) => {
 // Return a book
 app.post('/books/:bookId/return', async (req, res) => {
   const { bookId } = req.params;
-  const { userId } = req.body;
-  const event = {
-    eventType: 'BookReturned',
-    version: '1.0',
-    timestamp: new Date().toISOString(),
-    data: { bookId: Number(bookId), userId }
-  };
+
   try {
+    // Check book exists and is reserved
+    const bookResult = await pool.query('SELECT status, reserved_by FROM books WHERE book_id = $1', [bookId]);
+    if (bookResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Book not found' });
+    }
+    if (bookResult.rows[0].status !== 'RESERVED' && bookResult.rows[0].status !== 'EXCHANGED') {
+      return res.status(409).json({ error: 'Book is not currently reserved or exchanged' });
+    }
+
+    const returnedBy = bookResult.rows[0].reserved_by;
+    const event = {
+      eventType: 'BookReturned',
+      version: '1.0',
+      timestamp: new Date().toISOString(),
+      data: { bookId: Number(bookId), userId: returnedBy }
+    };
     // Update books table (read model)
     await pool.query(
       'UPDATE books SET status = $1, reserved_by = NULL WHERE book_id = $2',

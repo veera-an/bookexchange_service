@@ -164,6 +164,8 @@ services:
       - ./book-service/init_events_table.sql:/migrations/03_init_events_table.sql:ro
       - ./exchange-service/init_trades_table.sql:/migrations/04_init_trades_table.sql:ro
       - ./user-service/init_events_table.sql:/migrations/05_init_user_events_table.sql:ro
+      - ./user-service/seed_users.sql:/migrations/06_seed_users.sql:ro
+      - ./book-service/seed_books.sql:/migrations/07_seed_books.sql:ro
       - ./migration-service/migrate.sh:/migrate.sh:ro
     entrypoint: ["/bin/bash", "/migrate.sh"]
     networks:

@@ -23,7 +23,8 @@ app.get('/', (req, res) => {
 
 // Create user (CRUD + event sourcing)
 app.post('/users', async (req, res) => {
-  const { userId, username, email, city, preferences } = req.body;
+  const { username, email, city, preferences } = req.body;
+  const userId = req.body.userId || crypto.randomUUID();
   const event = {
     eventType: 'UserRegistered',
     version: '1.0',
