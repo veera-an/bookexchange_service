@@ -1,10 +1,12 @@
+## Project presentation video
+
+https://github.com/user-attachments/assets/504478cc-659a-449e-ada4-518e553a7f2a
+
 # Book Exchange Microservices
 
 A distributed microservices platform for exchanging books between users. Built with Node.js, PostgreSQL, RabbitMQ, and Nginx, following Domain-Driven Design (DDD) principles.
 
 > See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed technology choices, communication patterns, and system design.
-
-README.md and ARCHITECTURE.md written with the help of Copilot.
 
 ## Quick Start
 
@@ -56,7 +58,8 @@ cd tests && npm install && npm test
 | `GET` | `/trades` | List all trades |
 | `GET` | `/trades/:tradeId` | Get trade status |
 | `POST` | `/trades/:tradeId/accept` | Accept a trade — publishes `EXCHANGE_COMPLETED` event |
-| `POST` | `/trades/:tradeId/reject` | Reject a trade (`reason`) |
+| `POST` | `/trades/:tradeId/reject` | Reject a trade (`reason`) — returns book to AVAILABLE |
+| `POST` | `/trades/:tradeId/return` | Return book after completed trade — book back to AVAILABLE |
 | `GET` | `/health` | Health check |
 
 ## Example: Full Trade Workflow
@@ -146,3 +149,5 @@ docker-compose down
 # Stop and remove containers + database volumes (clean slate)
 docker-compose down -v
 ```
+
+README.md and ARCHITECTURE.md written with the help of Copilot.
